@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, isConfigured } from "@/lib/firebase";
 
@@ -24,7 +24,7 @@ export default function AdminPage() {
     try {
       if (!user) return setStatus("Accedi con un account admin per continuare.");
       if (!(await getDoc(doc(db, "admins", user.uid))).exists()) return setStatus("Non hai i permessi per moderare i contenuti.");
-      const [pending, members, access] = await Promise.all([getDocs(query(collection(db, "submissions"), where("status", "==", "pending"), orderBy("createdAt", "asc"))), getDocs(collection(db, "users")), getDocs(collection(db, "rankingAccess"))]);
+      const [pending, members, access] = await Promise.all([getDocs(query(collection(db, "submissions"), where("status", "==", "pending"))), getDocs(collection(db, "users")), getDocs(collection(db, "rankingAccess"))]);
       setItems(pending.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Submission, "id">) })));
       setUsers(members.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<User, "id">) })));
       setEnabled(access.docs.map((item) => item.id));
