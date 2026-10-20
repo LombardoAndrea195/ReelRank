@@ -6,7 +6,7 @@ import { auth, db, isConfigured } from "@/lib/firebase";
 
 type Comment = { id: string; body: string; username: string };
 
-export default function VotePanel({ submissionId, submittedByUserId, average, ratings, likes }: { submissionId: string; submittedByUserId?: string; average: number; ratings: number; likes: number }) {
+export default function VotePanel({ submissionId, average, ratings, likes }: { submissionId: string; average: number; ratings: number; likes: number }) {
   const [message, setMessage] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
@@ -20,7 +20,7 @@ export default function VotePanel({ submissionId, submittedByUserId, average, ra
     const token = await user.getIdToken(); const response = await fetch("/api/interactions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ action, submissionId, value }) }); const data = await response.json(); if (!response.ok) return setMessage(data.error ?? "Operazione non riuscita."); return data;
   };
   const rate = async (score: number) => {
-    if (isRating || auth.currentUser?.uid === submittedByUserId) return;
+    if (isRating) return;
     setIsRating(true);
     const data = await interact("rate", score);
     setIsRating(false);
@@ -33,6 +33,5 @@ export default function VotePanel({ submissionId, submittedByUserId, average, ra
   const like = async () => { const data = await interact("like"); if (data) setMessage(data.liked ? "Like registrato." : "Like rimosso."); };
   const comment = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; const body = String(new FormData(form).get("comment")).trim(); if (!body) return; const data = await interact("comment", body); if (data) { setComments((old) => [{ id: data.id, body, username: data.username }, ...old]); form.reset(); } };
   const displayedAverage = ratingCount ? ratingTotal / ratingCount : 0;
-  const isOwnContent = auth.currentUser?.uid === submittedByUserId;
-  return <div className="vote-panel"><div className="metrics"><strong>{displayedAverage ? displayedAverage.toFixed(1) : "—"}</strong><span>/10 · {ratingCount} voti</span></div>{isOwnContent ? <p className="feedback">Non puoi votare un contenuto che hai proposto.</p> : <div className="rating-actions" aria-label="Vota da uno a dieci">{[1,2,3,4,5,6,7,8,9,10].map((score) => <button key={score} type="button" onClick={() => rate(score)} disabled={isRating} aria-pressed={myScore === score} aria-label={`Vota ${score} su 10`}>{score}</button>)}</div>}<button className="like" type="button" onClick={like}>♡ {likes}</button><button className="comment-toggle" type="button" onClick={() => setShowComments(!showComments)}>{showComments ? "Chiudi commenti" : "Commenta"}</button>{showComments && <div className="comments"><form onSubmit={comment}><input name="comment" maxLength={1000} placeholder="Scrivi un commento" aria-label="Commento" /><button>Invia</button></form>{comments.map((item) => <p key={item.id}><b>@{item.username}</b> {item.body}</p>)}</div>}{message && <p className="feedback" role="status">{message}</p>}</div>;
+  return <div className="vote-panel"><div className="metrics"><strong>{displayedAverage ? displayedAverage.toFixed(1) : "—"}</strong><span>/10 · {ratingCount} voti</span></div><div className="rating-actions" aria-label="Vota da uno a dieci">{[1,2,3,4,5,6,7,8,9,10].map((score) => <button key={score} type="button" onClick={() => rate(score)} disabled={isRating} aria-pressed={myScore === score} aria-label={`Vota ${score} su 10`}>{score}</button>)}</div><button className="like" type="button" onClick={like}>♡ {likes}</button><button className="comment-toggle" type="button" onClick={() => setShowComments(!showComments)}>{showComments ? "Chiudi commenti" : "Commenta"}</button>{showComments && <div className="comments"><form onSubmit={comment}><input name="comment" maxLength={1000} placeholder="Scrivi un commento" aria-label="Commento" /><button>Invia</button></form>{comments.map((item) => <p key={item.id}><b>@{item.username}</b> {item.body}</p>)}</div>}{message && <p className="feedback" role="status">{message}</p>}</div>;
 }

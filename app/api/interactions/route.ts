@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
     if (action === "rate") {
       const score = Number(value);
       if (!Number.isInteger(score) || score < 1 || score > 10) return NextResponse.json({ error: "Voto non valido." }, { status: 400 });
-      if (content.submittedByUserId === user.uid) return NextResponse.json({ error: "Non puoi votare un contenuto che hai proposto." }, { status: 403 });
 
       const rating = submission.collection("ratings").doc(user.uid);
       const result = await db.runTransaction(async (tx) => {
