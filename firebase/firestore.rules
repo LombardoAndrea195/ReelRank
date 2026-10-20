@@ -1,0 +1,106 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function submission(submissionId) {
+      return get(
+        /databases/$(database)/documents/submissions/$(submissionId)
+      );
+    }
+
+    function seasonIsActive(submissionId) {
+      return get(
+        /databases/$(database)/documents/seasons/$(submission(submissionId).data.seasonId)
+      ).data.status == 'active';
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow read, update: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /admins/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /seasons/{seasonId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /creators/{creatorId} {
+      allow read: if true;
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if resource.data.status == 'approved' || isAdmin();
+
+      allow create: if signedIn()
+        && request.resource.data.submittedByUserId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.source == 'web';
+
+      allow update, delete: if isAdmin();
+
+      match /ratings/{userId} {
+        allow read: if true;
+
+        allow create: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.score is int
+          && request.resource.data.score >= 1
+          && request.resource.data.score <= 10
+          && submission(submissionId).data.status == 'approved'
+          && submission(submissionId).data.submittedByUserId != request.auth.uid
+          && seasonIsActive(submissionId);
+
+        allow update: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.score is int
+          && request.resource.data.score >= 1
+          && request.resource.data.score <= 10
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['score', 'updatedAt'])
+          && seasonIsActive(submissionId);
+
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /likes/{userId} {
+        allow read: if true;
+
+        allow create, delete: if signedIn()
+          && request.auth.uid == userId
+          && submission(submissionId).data.status == 'approved'
+          && submission(submissionId).data.submittedByUserId != request.auth.uid
+          && seasonIsActive(submissionId);
+      }
+
+      match /comments/{commentId} {
+        allow read: if resource.data.status == 'visible' || isAdmin();
+
+        allow create: if signedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.body is string
+          && request.resource.data.body.size() >= 1
+          && request.resource.data.body.size() <= 1000
+          && submission(submissionId).data.status == 'approved'
+          && seasonIsActive(submissionId);
+
+        allow update, delete: if isAdmin();
+      }
+    }
+  }
+}
