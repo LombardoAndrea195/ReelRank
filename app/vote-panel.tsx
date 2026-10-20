@@ -1,29 +1,22 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { isConfigured, supabase } from "@/lib/supabase";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { auth, db, isConfigured } from "@/lib/firebase";
+
+type Comment = { id: string; body: string; username: string };
 
 export default function VotePanel({ submissionId, average, ratings, likes }: { submissionId: string; average: number; ratings: number; likes: number }) {
   const [message, setMessage] = useState("");
-  const [comments, setComments] = useState<{ id: string; body: string; profiles: { username: string }[] }[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
-  useEffect(() => { if (isConfigured && showComments) supabase.from("comments").select("id,body,profiles(username)").eq("submission_id", submissionId).order("created_at", { ascending: false }).then(({ data }) => setComments((data ?? []) as typeof comments)); }, [showComments, submissionId]);
-  const requireUser = async () => {
-    if (!isConfigured) return null;
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) { setMessage("Accedi per votare."); return null; }
-    return data.user;
+  useEffect(() => { if (showComments && isConfigured) getDocs(query(collection(db, "submissions", submissionId, "comments"), orderBy("createdAt", "desc"), limit(20))).then((snap) => setComments(snap.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Comment, "id">) })))); }, [showComments, submissionId]);
+  const interact = async (action: "rate" | "like" | "comment", value?: number | string) => {
+    const user = auth.currentUser; if (!isConfigured || !user) return setMessage("Accedi per interagire.");
+    const token = await user.getIdToken(); const response = await fetch("/api/interactions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ action, submissionId, value }) }); const data = await response.json(); if (!response.ok) return setMessage(data.error ?? "Operazione non riuscita."); return data;
   };
-  const rate = async (score: number) => {
-    const user = await requireUser(); if (!user) return;
-    const { error } = await supabase.from("ratings").upsert({ submission_id: submissionId, user_id: user.id, score }, { onConflict: "user_id,submission_id" });
-    setMessage(error ? error.message : `Hai votato ${score}/10. Puoi cambiarlo quando vuoi.`);
-  };
-  const like = async () => {
-    const user = await requireUser(); if (!user) return;
-    const { error } = await supabase.from("likes").upsert({ submission_id: submissionId, user_id: user.id }, { onConflict: "user_id,submission_id", ignoreDuplicates: true });
-    setMessage(error ? error.message : "Like registrato.");
-  };
-  const comment = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const user = await requireUser(); if (!user) return; const form = new FormData(event.currentTarget); const body = String(form.get("comment")).trim(); if (!body) return; const { data, error } = await supabase.from("comments").insert({ submission_id: submissionId, user_id: user.id, body }).select("id,body,profiles(username)").single(); if (error) return setMessage(error.message); setComments((old) => [data as typeof comments[number], ...old]); event.currentTarget.reset(); };
-  return <div className="vote-panel"><div className="metrics"><strong>{average ? average.toFixed(1) : "—"}</strong><span>/10 · {ratings} voti</span></div><div className="rating-actions" aria-label="Vota da uno a dieci">{[1,2,3,4,5,6,7,8,9,10].map((score) => <button key={score} onClick={() => rate(score)} aria-label={`Vota ${score} su 10`}>{score}</button>)}</div><button className="like" onClick={like}>♡ {likes}</button><button className="comment-toggle" onClick={() => setShowComments(!showComments)}>{showComments ? "Chiudi commenti" : "Commenta"}</button>{showComments && <div className="comments"><form onSubmit={comment}><input name="comment" maxLength={1000} placeholder="Scrivi un commento" aria-label="Commento" /><button>Invia</button></form>{comments.map((item) => <p key={item.id}><b>@{item.profiles[0]?.username ?? "utente"}</b> {item.body}</p>)}</div>}{message && <p className="feedback" role="status">{message}</p>}</div>;
+  const rate = async (score: number) => { const data = await interact("rate", score); if (data) setMessage(`Hai votato ${score}/10. Puoi cambiarlo quando vuoi.`); };
+  const like = async () => { const data = await interact("like"); if (data) setMessage(data.liked ? "Like registrato." : "Like rimosso."); };
+  const comment = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const body = String(new FormData(event.currentTarget).get("comment")).trim(); if (!body) return; const data = await interact("comment", body); if (data) { setComments((old) => [{ id: data.id, body, username: data.username }, ...old]); event.currentTarget.reset(); } };
+  return <div className="vote-panel"><div className="metrics"><strong>{average ? average.toFixed(1) : "—"}</strong><span>/10 · {ratings} voti</span></div><div className="rating-actions" aria-label="Vota da uno a dieci">{[1,2,3,4,5,6,7,8,9,10].map((score) => <button key={score} onClick={() => rate(score)} aria-label={`Vota ${score} su 10`}>{score}</button>)}</div><button className="like" onClick={like}>♡ {likes}</button><button className="comment-toggle" onClick={() => setShowComments(!showComments)}>{showComments ? "Chiudi commenti" : "Commenta"}</button>{showComments && <div className="comments"><form onSubmit={comment}><input name="comment" maxLength={1000} placeholder="Scrivi un commento" aria-label="Commento" /><button>Invia</button></form>{comments.map((item) => <p key={item.id}><b>@{item.username}</b> {item.body}</p>)}</div>}{message && <p className="feedback" role="status">{message}</p>}</div>;
 }

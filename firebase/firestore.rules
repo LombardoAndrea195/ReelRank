@@ -50,7 +50,11 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.submittedByUserId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.source == 'web';
+        && request.resource.data.source == 'web'
+        && request.resource.data.ratingTotal == 0
+        && request.resource.data.ratingCount == 0
+        && request.resource.data.likesCount == 0
+        && request.resource.data.commentsCount == 0;
 
       allow update, delete: if isAdmin();
 
