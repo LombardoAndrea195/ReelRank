@@ -26,11 +26,13 @@ curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 /submit @creator_originale https://www.instagram.com/reel/CODICE/ Titolo opzionale
 ```
 
-Il bot verifica il formato, crea/trova il creator, salva il contenuto nella stagione attiva e lo pubblica subito online. Le proposte inserite dal form del sito restano invece `pending`, così un moderatore può verificarne l'attribuzione prima della pubblicazione.
+Il bot verifica il formato, crea/trova il creator, salva il contenuto nella stagione attiva e lo pubblica subito online. Dal form del sito, le proposte degli utenti già abilitati alla classifica vengono pubblicate subito; quelle degli altri utenti restano `pending`, così un moderatore può verificarne l'attribuzione prima della pubblicazione.
 
 ## Moderazione admin
 
 Per promuovere un utente ad amministratore, dopo la sua prima registrazione crea in Firestore un documento in `admins` con ID uguale al Firebase UID dell'utente. L'admin può quindi aprire `/admin`, verificare le proposte manuali e scegliere **Approva** oppure **Nascondi**.
+
+Quando l'admin abilita un utente nella sezione **Accesso classifica**, quell'utente può vedere e votare la classifica e pubblicare direttamente le proposte successive. È necessario pubblicare anche le regole aggiornate con `firebase deploy --only firestore:rules`.
 
 ## Deploy
 

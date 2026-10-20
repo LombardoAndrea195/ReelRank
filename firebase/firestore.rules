@@ -16,6 +16,10 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/rankingAccess/$(request.auth.uid));
     }
 
+    function canPublishDirectly() {
+      return canAccessRanking() || isAdmin();
+    }
+
     function submission(submissionId) {
       return get(
         /databases/$(database)/documents/submissions/$(submissionId)
@@ -26,6 +30,11 @@ service cloud.firestore {
       return get(
         /databases/$(database)/documents/seasons/$(submission(submissionId).data.seasonId)
       ).data.status == 'active';
+    }
+
+    function isNotSubmissionAuthor(submissionId) {
+      return !submission(submissionId).data.keys().hasAll(['submittedByUserId'])
+        || submission(submissionId).data.submittedByUserId != request.auth.uid;
     }
 
     match /users/{userId} {
@@ -60,7 +69,10 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.submittedByUserId == request.auth.uid
-        && request.resource.data.status == 'pending'
+        && (
+          request.resource.data.status == 'pending' ||
+          (request.resource.data.status == 'approved' && canPublishDirectly())
+        )
         && request.resource.data.source == 'web'
         && request.resource.data.ratingTotal == 0
         && request.resource.data.ratingCount == 0
@@ -75,20 +87,21 @@ service cloud.firestore {
         allow create: if signedIn()
           && request.auth.uid == userId
           && request.resource.data.score is int
-          && request.resource.data.score >= 1
-          && request.resource.data.score <= 10
-          && submission(submissionId).data.status == 'approved'
-          && submission(submissionId).data.submittedByUserId != request.auth.uid
-          && seasonIsActive(submissionId);
+           && request.resource.data.score >= 1
+           && request.resource.data.score <= 10
+           && submission(submissionId).data.status == 'approved'
+           && isNotSubmissionAuthor(submissionId)
+           && seasonIsActive(submissionId);
 
         allow update: if signedIn()
           && request.auth.uid == userId
           && request.resource.data.score is int
           && request.resource.data.score >= 1
           && request.resource.data.score <= 10
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['score', 'updatedAt'])
-          && seasonIsActive(submissionId);
+           && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['score', 'updatedAt'])
+           && isNotSubmissionAuthor(submissionId)
+           && seasonIsActive(submissionId);
 
         allow delete: if signedIn() && request.auth.uid == userId;
       }
@@ -99,7 +112,6 @@ service cloud.firestore {
         allow create, delete: if signedIn()
           && request.auth.uid == userId
           && submission(submissionId).data.status == 'approved'
-          && submission(submissionId).data.submittedByUserId != request.auth.uid
           && seasonIsActive(submissionId);
       }
 
