@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from "firebase/firestore";
-import { contentType, isInstagramContentUrl, normalizeCreator } from "@/lib/instagram";
+import { contentType, isInstagramContentUrl, normalizeCreator, normalizeInstagramUrl } from "@/lib/instagram";
 import { auth, db, isConfigured } from "@/lib/firebase";
 
 export default function SubmitPage() {
@@ -12,8 +12,9 @@ export default function SubmitPage() {
     event.preventDefault();
     if (!isConfigured) return setMessage("Aggiungi prima le chiavi Supabase.");
     const formElement = event.currentTarget;
-    const form = new FormData(formElement); const url = String(form.get("url")).trim(); const username = normalizeCreator(String(form.get("creator")));
-    if (!isInstagramContentUrl(url)) return setMessage("Inserisci un link valido a un Reel o post Instagram.");
+    const form = new FormData(formElement); const rawUrl = String(form.get("url")).trim(); const username = normalizeCreator(String(form.get("creator")));
+    if (!isInstagramContentUrl(rawUrl)) return setMessage("Inserisci un link valido a un Reel o post Instagram.");
+    const url = normalizeInstagramUrl(rawUrl);
     const user = auth.currentUser; if (!user) return setMessage("Accedi prima di proporre un contenuto.");
     try { const seasons = await getDocs(query(collection(db, "seasons"), where("status", "==", "active"), limit(1))); if (seasons.empty) return setMessage("Non c'è una stagione attiva."); const creator = doc(db, "creators", username); if (!(await getDoc(creator)).exists()) await setDoc(creator, { instagramUsername: username, createdAt: serverTimestamp() }); await addDoc(collection(db, "submissions"), { seasonId: seasons.docs[0]!.id, creatorUsername: username, submittedByUserId: user.uid, instagramUrl: url, contentType: contentType(url), title: String(form.get("title")).trim() || null, status: "pending", source: "web", ratingTotal: 0, ratingCount: 0, likesCount: 0, commentsCount: 0, createdAt: serverTimestamp() }); setMessage("Contenuto inviato: sarà visibile dopo la verifica del team."); formElement.reset(); } catch (error) { setMessage(error instanceof Error ? error.message : "Non riesco a inviare il contenuto."); }
   }
