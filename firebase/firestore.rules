@@ -11,6 +11,11 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    function canAccessRanking() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/rankingAccess/$(request.auth.uid));
+    }
+
     function submission(submissionId) {
       return get(
         /databases/$(database)/documents/submissions/$(submissionId)
@@ -25,7 +30,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow create: if signedIn() && request.auth.uid == userId;
-      allow read, update: if signedIn() && request.auth.uid == userId;
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /rankingAccess/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
     }
 
     match /admins/{userId} {
@@ -45,7 +56,7 @@ service cloud.firestore {
     }
 
     match /submissions/{submissionId} {
-      allow read: if resource.data.status == 'approved' || isAdmin();
+      allow read: if isAdmin() || (resource.data.status == 'approved' && canAccessRanking());
 
       allow create: if signedIn()
         && request.resource.data.submittedByUserId == request.auth.uid
@@ -59,7 +70,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
 
       match /ratings/{userId} {
-        allow read: if true;
+        allow read: if canAccessRanking() || isAdmin();
 
         allow create: if signedIn()
           && request.auth.uid == userId
@@ -83,7 +94,7 @@ service cloud.firestore {
       }
 
       match /likes/{userId} {
-        allow read: if true;
+        allow read: if canAccessRanking() || isAdmin();
 
         allow create, delete: if signedIn()
           && request.auth.uid == userId
@@ -93,7 +104,7 @@ service cloud.firestore {
       }
 
       match /comments/{commentId} {
-        allow read: if resource.data.status == 'visible' || isAdmin();
+        allow read: if isAdmin() || (resource.data.status == 'visible' && canAccessRanking());
 
         allow create: if signedIn()
           && request.resource.data.userId == request.auth.uid
