@@ -8,7 +8,9 @@ export function isInstagramContentUrl(value: string) {
 }
 
 export function contentType(url: string) {
-  return new URL(url).pathname.includes("/reel/") ? "reel" : "post";
+  const parsed = new URL(url);
+  if (["instagram.com", "www.instagram.com"].includes(parsed.hostname)) return parsed.pathname.includes("/reel/") ? "reel" : "post";
+  return "link";
 }
 
 export function normalizeInstagramUrl(value: string) {
