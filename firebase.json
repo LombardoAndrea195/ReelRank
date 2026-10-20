@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "rules": "firebase/firestore.rules"
+  },
+  "project": "rimasti-2fe82"
+}
