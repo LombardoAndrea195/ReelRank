@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { collection, getDoc, getDocs, limit, query, where, doc } from "firebase/firestore";
+import { collection, getDoc, getDocs, limit, onSnapshot, query, where, doc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, isConfigured } from "@/lib/firebase";
 import VotePanel from "../vote-panel";
@@ -92,35 +92,44 @@ export default function RankingPage() {
   const goTo = (next: typeof tab) => { setTab(next); document.getElementById("sezioni")?.scrollIntoView({ block: "start" }); };
   const seenKey = useRef("");
 
-  useEffect(() => onAuthStateChanged(auth, async (user) => {
-    try {
-      if (!user || !isConfigured) return setAllowed(false);
-      const [access, admin] = await Promise.all([getDoc(doc(db, "rankingAccess", user.uid)), getDoc(doc(db, "admins", user.uid))]);
-      if (!access.exists() && !admin.exists()) return setAllowed(false);
-      setAllowed(true);
-      const active = await getDocs(query(collection(db, "seasons"), where("status", "==", "active"), limit(1)));
-      if (active.empty) return;
-      const current = active.docs[0]!;
-      setSeason(String(current.data().name));
-      const [content, seasons] = await Promise.all([getDocs(query(collection(db, "submissions"), where("status", "==", "approved"))), getDocs(collection(db, "seasons"))]);
-      const all = content.docs.map((entry) => ({ id: entry.id, ...(entry.data() as Omit<Submission, "id">) }));
-      const currentItems = all.filter((entry) => entry.seasonId === current.id);
-      setItems(currentItems);
-      const names = new Map(seasons.docs.map((entry) => [entry.id, String(entry.data().name ?? entry.id)]));
-      const past = new Map<string, Submission[]>();
-      all.filter((entry) => entry.seasonId !== current.id).forEach((entry) => past.set(entry.seasonId, [...(past.get(entry.seasonId) ?? []), entry]));
-      setArchive([...past.entries()].map(([id, list]) => ({ id, name: names.get(id) ?? id, items: list })).sort((a, b) => b.name.localeCompare(a.name)));
-      seenKey.current = `reelrank:seen:${user.uid}`;
-      try { setSeenAtLoad(new Set(JSON.parse(localStorage.getItem(seenKey.current) ?? "[]"))); } catch { /* storage unavailable */ }
-      const scores: Record<string, number> = {};
-      await Promise.all(currentItems.map(async (entry) => { try { const mine = await getDoc(doc(db, "submissions", entry.id, "ratings", user.uid)); if (mine.exists()) scores[entry.id] = Number(mine.data().score); } catch { /* unknown vote counts as not voted */ } }));
-      setMyScores(scores);
-      setVotedAtLoad(new Set(Object.keys(scores)));
-    } catch {
-      setError("Non riesco a verificare i permessi. Pubblica le regole Firestore aggiornate e ricarica la pagina.");
-      setAllowed(false);
-    }
-  }), []);
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      stop?.(); stop = undefined;
+      try {
+        if (!user || !isConfigured) return setAllowed(false);
+        const [access, admin] = await Promise.all([getDoc(doc(db, "rankingAccess", user.uid)), getDoc(doc(db, "admins", user.uid))]);
+        if (!access.exists() && !admin.exists()) return setAllowed(false);
+        setAllowed(true);
+        const [active, seasons] = await Promise.all([getDocs(query(collection(db, "seasons"), where("status", "==", "active"), limit(1))), getDocs(collection(db, "seasons"))]);
+        if (active.empty) return;
+        const current = active.docs[0]!;
+        setSeason(String(current.data().name));
+        const names = new Map(seasons.docs.map((entry) => [entry.id, String(entry.data().name ?? entry.id)]));
+        seenKey.current = `reelrank:seen:${user.uid}`;
+        try { setSeenAtLoad(new Set(JSON.parse(localStorage.getItem(seenKey.current) ?? "[]"))); } catch { /* storage unavailable */ }
+        let first = true;
+        stop = onSnapshot(query(collection(db, "submissions"), where("status", "==", "approved")), async (snapshot) => {
+          const all = snapshot.docs.map((entry) => ({ id: entry.id, ...(entry.data() as Omit<Submission, "id">) }));
+          const currentItems = all.filter((entry) => entry.seasonId === current.id);
+          setItems(currentItems);
+          const past = new Map<string, Submission[]>();
+          all.filter((entry) => entry.seasonId !== current.id).forEach((entry) => past.set(entry.seasonId, [...(past.get(entry.seasonId) ?? []), entry]));
+          setArchive([...past.entries()].map(([id, list]) => ({ id, name: names.get(id) ?? id, items: list })).sort((a, b) => b.name.localeCompare(a.name)));
+          if (!first) return;
+          first = false;
+          const scores: Record<string, number> = {};
+          await Promise.all(currentItems.map(async (entry) => { try { const mine = await getDoc(doc(db, "submissions", entry.id, "ratings", user.uid)); if (mine.exists()) scores[entry.id] = Number(mine.data().score); } catch { /* unknown vote counts as not voted */ } }));
+          setMyScores(scores);
+          setVotedAtLoad(new Set(Object.keys(scores)));
+        }, () => setError("Non riesco ad aggiornare i contenuti in tempo reale. Ricarica la pagina."));
+      } catch {
+        setError("Non riesco a verificare i permessi. Pubblica le regole Firestore aggiornate e ricarica la pagina.");
+        setAllowed(false);
+      }
+    });
+    return () => { stop?.(); unsubscribeAuth(); };
+  }, []);
 
   const markSeen = (id: string) => {
     if (!seenKey.current) return;
@@ -145,8 +154,8 @@ export default function RankingPage() {
   const seasonNames = new Map([[items[0]?.seasonId ?? "", season], ...archive.map((group) => [group.id, group.name] as [string, string])]);
 
   const updateSubmissionRating = (submissionId: string, ratingTotal: number, ratingCount: number) => setItems((current) => current.map((item) => item.id === submissionId ? { ...item, ratingTotal, ratingCount } : item));
-  const updateSubmissionLikes = (submissionId: string, likesCount: number) => setItems((current) => current.map((item) => item.id === submissionId ? { ...item, likesCount } : item));
-  const updateSubmissionComments = (submissionId: string, commentsCount: number) => setItems((current) => current.map((item) => item.id === submissionId ? { ...item, commentsCount } : item));
+  const updateSubmissionLikes = (submissionId: string, likesCount: number) => { setItems((current) => current.map((item) => item.id === submissionId ? { ...item, likesCount } : item)); setArchive((groups) => groups.map((group) => ({ ...group, items: group.items.map((item) => item.id === submissionId ? { ...item, likesCount } : item) }))); };
+  const updateSubmissionComments = (submissionId: string, commentsCount: number) => { setItems((current) => current.map((item) => item.id === submissionId ? { ...item, commentsCount } : item)); setArchive((groups) => groups.map((group) => ({ ...group, items: group.items.map((item) => item.id === submissionId ? { ...item, commentsCount } : item) }))); };
   const panel = (item: Submission) => <VotePanel submissionId={item.id} ratingTotal={item.ratingTotal} ratings={item.ratingCount} likes={item.likesCount} commentsCount={item.commentsCount ?? 0} initialScore={myScores[item.id] ?? null} onRatingChange={(ratingTotal, ratingCount) => { updateSubmissionRating(item.id, ratingTotal, ratingCount); setMyScores((all) => all[item.id] === undefined ? { ...all, [item.id]: 0 } : all); }} onLikeChange={(likesCount) => updateSubmissionLikes(item.id, likesCount)} onCommentChange={(commentsCount) => updateSubmissionComments(item.id, commentsCount)} />;
 
   return <main>
@@ -166,7 +175,7 @@ export default function RankingPage() {
     {tab === "classifica" && <>
     <section className="block" id="classifica">
       <div className="block-head"><h2>In classifica</h2><p>Ordinata per voto medio, aggiornata live.</p></div>
-      {ranked.length ? <ol className="ranking-list">{ranked.map((item, index) => { const mine = myScores[item.id]; const unvoted = mine === undefined; return <li className="rank-row" key={item.id} style={{ "--i": index } as React.CSSProperties}><div className="rank-line"><span className="rank-no">{position(index)}</span><div className="rank-title"><h3>{item.title ?? "Contenuto proposto"}{unvoted && <span className="flag">Da votare</span>}</h3><p>di @{item.creatorUsername}, {item.contentType}</p></div><p className="rank-score">{item.average ? item.average.toFixed(1) : "—"}<small>/10</small></p><p className="rank-votes">{item.ratingCount} {item.ratingCount === 1 ? "voto" : "voti"}</p><button className="rank-toggle" type="button" aria-expanded={openId === item.id} onClick={() => setOpenId(openId === item.id ? null : item.id)}>{openId === item.id ? "Chiudi" : unvoted ? "Guarda e vota" : "Guarda"}</button></div>{openId === item.id && <div className="rank-open"><div><Media item={item} /><a className="instagram-link" href={item.instagramUrl} target="_blank" rel="noreferrer">Apri contenuto</a></div>{panel(item)}</div>}</li>; })}</ol> : <div className="empty"><h2>La classifica aspetta il primo contenuto.</h2><p>Incolla un link pubblico, attribuiscilo al creator originale e lo verificheremo automaticamente.</p><Link className="button" href="/submit">Proponi il primo</Link></div>}
+      {ranked.length ? <ol className="ranking-list">{ranked.map((item, index) => { const mine = myScores[item.id]; const unvoted = mine === undefined; return <li className="rank-row" key={item.id} style={{ "--i": index } as React.CSSProperties}><div className="rank-line"><span className="rank-no">{position(index)}</span><div className="rank-title"><h3>{item.title ?? "Contenuto proposto"}{unvoted && <span className="flag">Da votare</span>}</h3><p>di @{item.creatorUsername}, {item.contentType}</p></div><p className="rank-score">{item.average ? item.average.toFixed(1) : "—"}<small>/10</small></p><p className="rank-votes">{item.ratingCount} {item.ratingCount === 1 ? "voto" : "voti"}<br />{item.likesCount} mi piace, {item.commentsCount ?? 0} {(item.commentsCount ?? 0) === 1 ? "commento" : "commenti"}</p><button className="rank-toggle" type="button" aria-expanded={openId === item.id} onClick={() => setOpenId(openId === item.id ? null : item.id)}>{openId === item.id ? "Chiudi" : unvoted ? "Guarda e vota" : "Guarda"}</button></div>{openId === item.id && <div className="rank-open"><div><Media item={item} /><a className="instagram-link" href={item.instagramUrl} target="_blank" rel="noreferrer">Apri contenuto</a></div>{panel(item)}</div>}</li>; })}</ol> : <div className="empty"><h2>La classifica aspetta il primo contenuto.</h2><p>Incolla un link pubblico, attribuiscilo al creator originale e lo verificheremo automaticamente.</p><Link className="button" href="/submit">Proponi il primo</Link></div>}
     </section>
 
     {creators.length > 0 && <section className="block creator-ranking"><div className="block-head"><h2>Creator della stagione</h2><p>Media di tutti i voti.</p></div><ol>{creators.map((creator, index) => <li key={creator.username}><span>{position(index)}</span><strong>@{creator.username}</strong><small>{creator.contents} {creator.contents === 1 ? "contenuto" : "contenuti"}, {creator.likes} like</small><b>{creator.score.toFixed(1)}</b></li>)}</ol></section>}</>}
@@ -179,7 +188,7 @@ export default function RankingPage() {
 
     {tab === "archivio" && <section className="archive" id="archivio">
       <div className="block"><div className="block-head"><h2>Archivio</h2><p>Tutti i video inseriti, dal più recente. Tocca un video per guardarlo in grande.</p></div>
-        <ArchiveGallery items={everything} seasonName={(id) => seasonNames.get(id) ?? "Stagione conclusa"} />
+        <ArchiveGallery items={everything} extras={(item) => <VotePanel variant="social" submissionId={item.id} ratingTotal={item.ratingTotal} ratings={item.ratingCount} likes={item.likesCount} commentsCount={item.commentsCount ?? 0} onRatingChange={() => {}} onLikeChange={(likesCount) => updateSubmissionLikes(item.id, likesCount)} onCommentChange={(commentsCount) => updateSubmissionComments(item.id, commentsCount)} />} seasonName={(id) => seasonNames.get(id) ?? "Stagione conclusa"} />
       </div>
     </section>}
   </main>;

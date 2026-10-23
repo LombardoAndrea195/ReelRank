@@ -4,17 +4,18 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import InstagramEmbed from "../instagram-embed";
 
-export type GalleryItem = { id: string; instagramUrl: string; contentType: "reel" | "post" | "link"; title?: string; previewImage?: string | null; creatorUsername: string; seasonId: string; createdAt?: { toMillis?: () => number } };
+export type GalleryItem = { id: string; instagramUrl: string; contentType: "reel" | "post" | "link"; title?: string; previewImage?: string | null; creatorUsername: string; seasonId: string; likesCount?: number; commentsCount?: number; createdAt?: { toMillis?: () => number } };
 
 const stamp = (item: GalleryItem) => item.createdAt?.toMillis?.() ?? 0;
 const dateLabel = (item: GalleryItem) => stamp(item) ? new Date(stamp(item)).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" }) : "Senza data";
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const nameOf = (item: GalleryItem) => item.title ?? "Contenuto proposto";
 
 function Poster({ item }: { item: GalleryItem }) {
   return item.previewImage ? <img src={item.previewImage} alt="" loading="lazy" /> : <span className="tile-blank" aria-hidden="true" />;
 }
 
-export default function ArchiveGallery({ items, seasonName }: { items: GalleryItem[]; seasonName: (seasonId: string) => string }) {
+export default function ArchiveGallery<T extends GalleryItem>({ items, seasonName, extras }: { items: T[]; seasonName: (seasonId: string) => string; extras?: (item: T) => React.ReactNode }) {
   const [creator, setCreator] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const returnTo = useRef<HTMLElement | null>(null);
@@ -60,6 +61,7 @@ export default function ArchiveGallery({ items, seasonName }: { items: GalleryIt
           <span className="tile-frame"><Poster item={item} /><span className="tile-play" aria-hidden="true" /></span>
           <span className="tile-title">{nameOf(item)}</span>
           <span className="tile-meta">@{item.creatorUsername}, {dateLabel(item)}</span>
+          <span className="tile-stats"><span>{plural(item.likesCount ?? 0, "mi piace", "mi piace")}</span><span>{plural(item.commentsCount ?? 0, "commento", "commenti")}</span></span>
         </button>
       </li>)}
     </ul>
@@ -80,6 +82,7 @@ export default function ArchiveGallery({ items, seasonName }: { items: GalleryIt
             <a className="instagram-link" href={current.instagramUrl} target="_blank" rel="noreferrer">Apri su Instagram</a>
           </div>
           <div className="player-nav"><button type="button" onClick={() => step(-1)}>Precedente</button><button type="button" onClick={() => step(1)}>Successivo</button></div>
+          {extras && <div className="player-social" key={`x-${current.id}`}>{extras(current)}</div>}
         </div>
       </div>
     </div>, document.body)}

@@ -23,8 +23,10 @@ export async function POST(request: NextRequest) {
     if (!snapshot.exists) return NextResponse.json({ error: "Contenuto non trovato." }, { status: 404 });
     const content = snapshot.data()!;
     if (content.status !== "approved") return NextResponse.json({ error: "Questo contenuto non è votabile." }, { status: 403 });
-    const season = await db.collection("seasons").doc(content.seasonId).get();
-    if (season.data()?.status !== "active") return NextResponse.json({ error: "La stagione non è attiva." }, { status: 403 });
+    if (action === "rate") {
+      const season = await db.collection("seasons").doc(content.seasonId).get();
+      if (season.data()?.status !== "active") return NextResponse.json({ error: "La stagione non è attiva: il voto non è più modificabile." }, { status: 403 });
+    }
 
     if (action === "rate") {
       const score = Number(value);

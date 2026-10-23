@@ -386,8 +386,8 @@ nav a:not(.button):hover { color: var(--color-mark); }
 .player-stage .instagram-embed { width: 100%; min-height: 0; }
 .player-side { display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-xl); animation: swap 420ms var(--ease-out) backwards; }
 .player-top { display: flex; align-items: center; justify-content: space-between; font-size: var(--size-label); font-weight: 500; font-variant-numeric: tabular-nums; }
-.player button { min-height: 44px; padding: 0 var(--space-md); color: var(--color-ink); border: 0; background: var(--color-paper); font-weight: 500; cursor: pointer; transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out); }
-.player button:hover { color: var(--color-mark-ink); background: var(--color-mark); }
+.player-top button, .player-nav button { min-height: 44px; padding: 0 var(--space-md); color: var(--color-ink); border: 0; background: var(--color-paper); font-weight: 500; cursor: pointer; transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out); }
+.player-top button:hover, .player-nav button:hover { color: var(--color-mark-ink); background: var(--color-mark); }
 .player :focus-visible { outline-color: var(--color-paper); }
 .player-info { display: grid; gap: var(--space-xs); }
 .player-info h3 { max-width: 14ch; font-size: clamp(1.75rem, 3vw, 2.75rem); line-height: 1; letter-spacing: -0.04em; }
@@ -400,3 +400,13 @@ nav a:not(.button):hover { color: var(--color-mark); }
   .player-stage { width: min(100%, 540px); max-height: none; margin-inline: auto; }
   .player-side { gap: var(--space-lg); }
 }
+.player-side { max-height: calc(100svh - 48px); overflow-y: auto; justify-content: flex-start; }
+.player-social { padding: var(--space-lg); color: var(--color-ink); background: var(--color-paper); }
+.player-social .vote-panel { margin-top: 0; }
+.player-social :focus-visible { outline-color: var(--color-focus); }
+.player .player-social button:hover { color: inherit; background: none; }
+.player .player-social .comments form button { color: var(--color-paper); background: var(--color-ink); }
+.player .player-social .comments form button:hover { background: var(--color-mark); }
+.player .player-social .like:hover, .player .player-social .comment-toggle:hover { color: var(--color-mark); }
+.tile-stats { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); margin-top: var(--space-2xs); font-size: var(--size-label); font-weight: 500; font-variant-numeric: tabular-nums; }
+.tile-stats span + span { color: var(--color-accent); }
