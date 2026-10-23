@@ -113,7 +113,7 @@ export default function AdminPage() {
   return (
     <main className="admin">
       <nav>
-        <Link className="brand" href="/classifica">REEL<span>RANK</span></Link>
+        <Link className="brand" href="/classifica">Home</Link>
         <Link href="/classifica">Torna alla classifica</Link>
       </nav>
       <section>

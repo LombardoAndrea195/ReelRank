@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { auth, db, isConfigured } from "@/lib/firebase";
 
-type Comment = { id: string; body: string; username: string };
+type Comment = { id: string; body: string; username?: string; createdAt?: { toMillis?: () => number } };
 type Notice = { text: string; type: "success" | "error" };
 type VotePanelProps = {
   submissionId: string;
@@ -12,18 +12,19 @@ type VotePanelProps = {
   ratings: number;
   likes: number;
   commentsCount: number;
+  initialScore?: number | null;
   onRatingChange: (ratingTotal: number, ratingCount: number) => void;
   onLikeChange: (likesCount: number) => void;
   onCommentChange: (commentsCount: number) => void;
 };
 
-export default function VotePanel({ submissionId, ratingTotal: initialRatingTotal, ratings, likes, commentsCount, onRatingChange, onLikeChange, onCommentChange }: VotePanelProps) {
+export default function VotePanel({ submissionId, ratingTotal: initialRatingTotal, ratings, likes, commentsCount, initialScore = null, onRatingChange, onLikeChange, onCommentChange }: VotePanelProps) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [showComments, setShowComments] = useState(false);
+  const showComments = true;
   const [ratingTotal, setRatingTotal] = useState(initialRatingTotal);
   const [ratingCount, setRatingCount] = useState(ratings);
-  const [myScore, setMyScore] = useState<number | null>(null);
+  const [myScore, setMyScore] = useState<number | null>(initialScore);
   const [isRating, setIsRating] = useState(false);
   const showNotice = (text: string, type: Notice["type"] = "success") => setNotice({ text, type });
 
@@ -31,6 +32,10 @@ export default function VotePanel({ submissionId, ratingTotal: initialRatingTota
     setRatingTotal(initialRatingTotal);
     setRatingCount(ratings);
   }, [initialRatingTotal, ratings]);
+
+  useEffect(() => {
+    if (initialScore) setMyScore(initialScore);
+  }, [initialScore]);
 
   useEffect(() => {
     if (!notice) return;
@@ -41,7 +46,7 @@ export default function VotePanel({ submissionId, ratingTotal: initialRatingTota
   useEffect(() => {
     if (!showComments || !isConfigured) return;
     getDocs(query(collection(db, "submissions", submissionId, "comments"), where("status", "==", "visible"), limit(100)))
-      .then((snapshot) => setComments(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Comment, "id">) }))))
+      .then((snapshot) => setComments(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Comment, "id">) })).sort((a, b) => (b.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER) - (a.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER))))
       .catch(() => showNotice("Non riesco a caricare i commenti. Riprova tra poco.", "error"));
   }, [showComments, submissionId]);
 
@@ -99,5 +104,5 @@ export default function VotePanel({ submissionId, ratingTotal: initialRatingTota
   };
 
   const displayedAverage = ratingCount ? ratingTotal / ratingCount : 0;
-  return <div className="vote-panel"><div className="metrics"><strong>{displayedAverage ? displayedAverage.toFixed(1) : "—"}</strong><span>/10 · {ratingCount} voti</span></div><div className="rating-actions" aria-label="Vota da uno a dieci">{[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => <button key={score} type="button" onClick={() => rate(score)} disabled={isRating} aria-pressed={myScore === score} aria-label={`Vota ${score} su 10`}>{score}</button>)}</div><button className="like" type="button" onClick={like}>♡ {likes}</button><button className="comment-toggle" type="button" onClick={() => setShowComments(!showComments)}>{showComments ? "Chiudi commenti" : `${commentsCount} ${commentsCount === 1 ? "commento" : "commenti"}`}</button>{showComments && <div className="comments"><form onSubmit={comment}><input name="comment" maxLength={1000} placeholder="Scrivi un commento" aria-label="Commento" /><button>Invia</button></form>{comments.map((item) => <p key={item.id}><b>@{item.username}</b> {item.body}</p>)}</div>}{notice && <div className={`action-toast ${notice.type}`} role="status" aria-live="polite"><span aria-hidden="true">{notice.type === "success" ? "✓" : "!"}</span>{notice.text}</div>}</div>;
+  return <div className="vote-panel"><div className="metrics"><strong>{displayedAverage ? displayedAverage.toFixed(1) : "—"}</strong><span>/10 su {ratingCount} {ratingCount === 1 ? "voto" : "voti"}</span></div><div className="rating-actions" aria-label="Vota da uno a dieci">{[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => <button key={score} type="button" onClick={() => rate(score)} disabled={isRating} aria-pressed={myScore === score} aria-label={`Vota ${score} su 10`}>{score}</button>)}</div><div className="vote-extras"><button className="like" type="button" onClick={like}>Mi piace {likes}</button></div><div className="comments"><h4>{commentsCount === 0 ? "Nessun commento ancora" : `Commenti del gruppo (${commentsCount})`}</h4><form onSubmit={comment}><input name="comment" maxLength={1000} placeholder="Scrivi un commento" aria-label="Commento" /><button>Invia</button></form>{comments.map((item) => <p key={item.id}><b>@{item.username?.trim() || "utente"}</b> {item.body}</p>)}</div>{notice && <div className={`action-toast ${notice.type}`} role="status" aria-live="polite"><span aria-hidden="true">{notice.type === "success" ? "✓" : "!"}</span>{notice.text}</div>}</div>;
 }
