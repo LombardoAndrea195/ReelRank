@@ -151,6 +151,7 @@ export default function RankingPage() {
   const todo = queue.filter((entry) => myScores[entry.id] === undefined).length;
   const leader = ranked[0];
   const pending = byNewest(ranked.filter((entry) => myScores[entry.id] === undefined));
+  const tickerPeople = Array.from(pending.reduce((map, entry) => map.set(entry.creatorUsername, (map.get(entry.creatorUsername) ?? false) || !seenAtLoad.has(entry.id)), new Map<string, boolean>()), ([name, isNew]) => ({ name, isNew }));
   const everything = byNewest<Ranked>([...ranked, ...rank(archive.flatMap((group) => group.items))]);
   const seasonNames = new Map([[items[0]?.seasonId ?? "", season], ...archive.map((group) => [group.id, group.name] as [string, string])]);
 
@@ -170,7 +171,7 @@ export default function RankingPage() {
       </aside>
     </header>
 
-    {pending.length > 0 && <div className="ticker"><button className="ticker-label" type="button" onClick={() => goTo("da-votare")}>Da votare<span className="count">{pending.length}</span></button><div className="ticker-window" aria-hidden="true"><div className="ticker-track">{[0, 1, 2, 3, 4, 5].map((n) => <ul key={n}>{pending.map((item) => <li key={item.id}>{!seenAtLoad.has(item.id) && <span className="flag">Nuovo</span>}{item.title ?? "Contenuto proposto"} <span>di @{item.creatorUsername}</span></li>)}</ul>)}</div></div></div>}
+    {pending.length > 0 && <div className="ticker"><button className="ticker-label" type="button" onClick={() => goTo("da-votare")}>Da votare<span className="count">{pending.length}</span></button><div className="ticker-window" aria-hidden="true"><div className="ticker-track" style={{ animationDuration: `${Math.max(60, tickerPeople.length * 15)}s` }}>{[0, 1, 2, 3, 4, 5].map((n) => <ul key={n}>{tickerPeople.map((person) => <li key={person.name}>{person.isNew && <span className="flag">Nuovo</span>}@{person.name}</li>)}</ul>)}</div></div></div>}
     <div className="switcher" id="sezioni"><div className="switcher-inner" role="tablist" aria-label="Sezioni"><button type="button" role="tab" aria-selected={tab === "classifica"} onClick={() => goTo("classifica")}>Classifica</button><button type="button" role="tab" aria-selected={tab === "da-votare"} onClick={() => goTo("da-votare")}>Da votare{todo > 0 && <span className="count">{todo}</span>}</button><button type="button" role="tab" aria-selected={tab === "archivio"} onClick={() => goTo("archivio")}>Archivio{everything.length > 0 && <span className="count quiet">{everything.length}</span>}</button></div></div>
 
     {tab === "classifica" && <>
