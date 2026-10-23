@@ -6,12 +6,15 @@ import { collection, getDoc, getDocs, limit, query, where, doc } from "firebase/
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, isConfigured } from "@/lib/firebase";
 import VotePanel from "../vote-panel";
+import ArchiveGallery from "./archive-gallery";
 import InstagramEmbed from "../instagram-embed";
 
-type Submission = { id: string; instagramUrl: string; contentType: "reel" | "post" | "link"; title?: string; previewImage?: string | null; creatorUsername: string; ratingTotal: number; ratingCount: number; likesCount: number; commentsCount: number; seasonId: string };
+type Submission = { id: string; instagramUrl: string; contentType: "reel" | "post" | "link"; title?: string; previewImage?: string | null; creatorUsername: string; ratingTotal: number; ratingCount: number; likesCount: number; commentsCount: number; seasonId: string; createdAt?: { toMillis?: () => number } };
 type Ranked = Submission & { average: number };
 
 const rank = (items: Submission[]): Ranked[] => items.map((entry) => ({ ...entry, average: entry.ratingCount ? entry.ratingTotal / entry.ratingCount : 0 })).sort((a, b) => b.average - a.average || b.ratingCount - a.ratingCount);
+const when = (item: Submission) => item.createdAt?.toMillis?.() ?? 0;
+const byNewest = <T extends Submission>(list: T[]) => [...list].sort((a, b) => when(b) - when(a));
 const position = (index: number) => String(index + 1).padStart(2, "0");
 
 function CountUp({ value }: { value: number }) {
@@ -65,11 +68,11 @@ function QueueStage({ queue, seenAtLoad, myScores, onSeen, panel }: { queue: Sub
   const voted = myScores[current.id] !== undefined;
   const isNew = !seenAtLoad.has(current.id);
   return <div className="stage">
-    <div className="stage-video" key={current.id}><Media item={current} /></div>
+    <div className="stage-video" key={`v-${current.id}`}><Media item={current} /></div>
     <div className="stage-side">
       <div className="stage-nav"><button type="button" onClick={() => setIndex(Math.max(0, index - 1))} disabled={index === 0}>Precedente</button><span>{index + 1} di {queue.length}</span><button type="button" onClick={() => setIndex(Math.min(queue.length - 1, index + 1))} disabled={index >= queue.length - 1}>Successivo</button></div>
-      <div className="stage-info" key={current.id}>{voted ? <span className="flag">Votato</span> : isNew ? <span className="flag">Nuovo</span> : null}<p className="content-type">{current.contentType}</p><h3>{current.title ?? "Contenuto proposto"}</h3><p className="creator">di @{current.creatorUsername}</p><a className="instagram-link" href={current.instagramUrl} target="_blank" rel="noreferrer">Apri contenuto</a></div>
-      <div className="stage-panel" key={current.id}>{panel(current)}</div>
+      <div className="stage-info" key={`i-${current.id}`}>{voted ? <span className="flag">Votato</span> : isNew ? <span className="flag">Nuovo</span> : null}<p className="content-type">{current.contentType}</p><h3>{current.title ?? "Contenuto proposto"}</h3><p className="creator">di @{current.creatorUsername}</p><a className="instagram-link" href={current.instagramUrl} target="_blank" rel="noreferrer">Apri contenuto</a></div>
+      <div className="stage-panel" key={`p-${current.id}`}>{panel(current)}</div>
       <ul className="stage-list">{queue.map((item, i) => <li key={item.id}><button type="button" aria-current={i === index} onClick={() => setIndex(i)}><span>{position(i)}</span>{item.title ?? "Contenuto proposto"}{myScores[item.id] !== undefined && <small>votato</small>}</button></li>)}</ul>
     </div>
   </div>;
@@ -134,10 +137,12 @@ export default function RankingPage() {
     all[entry.creatorUsername] = current;
     return all;
   }, {})).map((creator) => ({ ...creator, score: creator.ratingCount ? creator.ratingTotal / creator.ratingCount : 0 })).sort((a, b) => b.score - a.score || b.likes - a.likes).slice(0, 5);
-  const queue = ranked.filter((entry) => !votedAtLoad.has(entry.id));
+  const queue = byNewest(ranked.filter((entry) => !votedAtLoad.has(entry.id)));
   const todo = queue.filter((entry) => myScores[entry.id] === undefined).length;
   const leader = ranked[0];
-  const pending = ranked.filter((entry) => myScores[entry.id] === undefined).sort((a, b) => Number(seenAtLoad.has(a.id)) - Number(seenAtLoad.has(b.id)));
+  const pending = byNewest(ranked.filter((entry) => myScores[entry.id] === undefined));
+  const everything = byNewest<Ranked>([...ranked, ...rank(archive.flatMap((group) => group.items))]);
+  const seasonNames = new Map([[items[0]?.seasonId ?? "", season], ...archive.map((group) => [group.id, group.name] as [string, string])]);
 
   const updateSubmissionRating = (submissionId: string, ratingTotal: number, ratingCount: number) => setItems((current) => current.map((item) => item.id === submissionId ? { ...item, ratingTotal, ratingCount } : item));
   const updateSubmissionLikes = (submissionId: string, likesCount: number) => setItems((current) => current.map((item) => item.id === submissionId ? { ...item, likesCount } : item));
@@ -156,7 +161,7 @@ export default function RankingPage() {
     </header>
 
     {pending.length > 0 && <div className="ticker"><button className="ticker-label" type="button" onClick={() => goTo("da-votare")}>Da votare<span className="count">{pending.length}</span></button><div className="ticker-window" aria-hidden="true"><div className="ticker-track">{[0, 1, 2, 3, 4, 5].map((n) => <ul key={n}>{pending.map((item) => <li key={item.id}>{!seenAtLoad.has(item.id) && <span className="flag">Nuovo</span>}{item.title ?? "Contenuto proposto"} <span>di @{item.creatorUsername}</span></li>)}</ul>)}</div></div></div>}
-    <div className="switcher" id="sezioni"><div className="switcher-inner" role="tablist" aria-label="Sezioni"><button type="button" role="tab" aria-selected={tab === "classifica"} onClick={() => setTab("classifica")}>Classifica</button><button type="button" role="tab" aria-selected={tab === "da-votare"} onClick={() => setTab("da-votare")}>Da votare{todo > 0 && <span className="count">{todo}</span>}</button><button type="button" role="tab" aria-selected={tab === "archivio"} onClick={() => setTab("archivio")}>Archivio{archive.length > 0 && <span className="count quiet">{archive.length}</span>}</button></div></div>
+    <div className="switcher" id="sezioni"><div className="switcher-inner" role="tablist" aria-label="Sezioni"><button type="button" role="tab" aria-selected={tab === "classifica"} onClick={() => goTo("classifica")}>Classifica</button><button type="button" role="tab" aria-selected={tab === "da-votare"} onClick={() => goTo("da-votare")}>Da votare{todo > 0 && <span className="count">{todo}</span>}</button><button type="button" role="tab" aria-selected={tab === "archivio"} onClick={() => goTo("archivio")}>Archivio{everything.length > 0 && <span className="count quiet">{everything.length}</span>}</button></div></div>
 
     {tab === "classifica" && <>
     <section className="block" id="classifica">
@@ -173,8 +178,8 @@ export default function RankingPage() {
     </section>}
 
     {tab === "archivio" && <section className="archive" id="archivio">
-      <div className="block"><div className="block-head"><h2>Archivio</h2><p>Le classifiche delle stagioni concluse.</p></div>
-        {archive.length ? archive.map((entry, index) => <details key={entry.id} open={index === 0}><summary>{entry.name}<small>{entry.items.length} contenuti</small></summary><ol className="ranking-list">{rank(entry.items).map((item, i) => <li className="rank-row" key={item.id}><div className="rank-line"><span className="rank-no">{position(i)}</span><div className="rank-title"><h3>{item.title ?? "Contenuto proposto"}</h3><p>di @{item.creatorUsername}</p></div><p className="rank-score">{item.average ? item.average.toFixed(1) : "—"}<small>/10</small></p><p className="rank-votes">{item.ratingCount} {item.ratingCount === 1 ? "voto" : "voti"}</p><a className="instagram-link" href={item.instagramUrl} target="_blank" rel="noreferrer">Apri contenuto</a></div></li>)}</ol></details>) : <div className="empty"><p>Nessuna stagione conclusa, per ora.</p></div>}
+      <div className="block"><div className="block-head"><h2>Archivio</h2><p>Tutti i video inseriti, dal più recente. Tocca un video per guardarlo in grande.</p></div>
+        <ArchiveGallery items={everything} seasonName={(id) => seasonNames.get(id) ?? "Stagione conclusa"} />
       </div>
     </section>}
   </main>;
