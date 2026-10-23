@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lookup } from "node:dns/promises";
+import { decodeEntities } from "@/lib/html-entities";
 import { contentType, isInstagramContentUrl, normalizeInstagramUrl } from "@/lib/instagram";
 
 const blockedHosts = new Set(["localhost", "0.0.0.0", "127.0.0.1", "::1"]);
@@ -20,7 +21,12 @@ async function publicUrl(value: unknown) {
 
 function meta(html: string, key: string) {
   const tag = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]*>`, "i").exec(html)?.[0];
-  return tag?.match(/content=["']([^"']*)["']/i)?.[1]?.replaceAll("&amp;", "&");
+  return tag?.match(/content=["']([^"']*)["']/i)?.[1];
+}
+
+function metaText(html: string, key: string) {
+  const value = meta(html, key);
+  return value === undefined ? undefined : decodeEntities(value);
 }
 
 export async function POST(request: NextRequest) {
@@ -35,7 +41,7 @@ export async function POST(request: NextRequest) {
     const finalUrl = await publicUrl(response.url);
     const canonicalUrl = isInstagramContentUrl(finalUrl.href) ? normalizeInstagramUrl(finalUrl.href) : finalUrl.href;
     const html = (await response.text()).slice(0, 500_000);
-    const title = meta(html, "og:title") ?? meta(html, "twitter:title") ?? finalUrl.hostname;
+    const title = metaText(html, "og:title") ?? metaText(html, "twitter:title") ?? finalUrl.hostname;
     const image = meta(html, "og:image") ?? meta(html, "twitter:image") ?? null;
     return NextResponse.json({ url: canonicalUrl, title, image, contentType: contentType(canonicalUrl) });
   } catch {

@@ -6,6 +6,7 @@ import { collection, getDoc, getDocs, limit, onSnapshot, query, where, doc } fro
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, isConfigured } from "@/lib/firebase";
 import VotePanel from "../vote-panel";
+import { decodeEntities } from "@/lib/html-entities";
 import ArchiveGallery from "./archive-gallery";
 import InstagramEmbed from "../instagram-embed";
 
@@ -110,7 +111,7 @@ export default function RankingPage() {
         try { setSeenAtLoad(new Set(JSON.parse(localStorage.getItem(seenKey.current) ?? "[]"))); } catch { /* storage unavailable */ }
         let first = true;
         stop = onSnapshot(query(collection(db, "submissions"), where("status", "==", "approved")), async (snapshot) => {
-          const all = snapshot.docs.map((entry) => ({ id: entry.id, ...(entry.data() as Omit<Submission, "id">) }));
+          const all = snapshot.docs.map((entry) => { const data = entry.data() as Omit<Submission, "id">; return { id: entry.id, ...data, title: data.title ? decodeEntities(data.title) : data.title }; });
           const currentItems = all.filter((entry) => entry.seasonId === current.id);
           setItems(currentItems);
           const past = new Map<string, Submission[]>();

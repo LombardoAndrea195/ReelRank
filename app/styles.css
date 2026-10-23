@@ -264,13 +264,13 @@ nav a:not(.button):hover { color: var(--color-mark); }
 .stage { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: var(--gap-columns); align-items: start; }
 .stage-video { max-width: 520px; background: var(--color-paper); }
 .stage-video .embed { min-height: 0; }
-.stage-side { display: grid; gap: var(--space-lg); color: var(--color-field-ink); }
+.stage-side { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); color: var(--color-field-ink); }
 .stage-nav { display: flex; align-items: center; gap: var(--space-lg); font-size: var(--size-label); font-weight: 500; }
 .stage-nav span { font-variant-numeric: tabular-nums; }
 .stage-nav button { min-height: 44px; padding: 0 var(--space-md); color: var(--color-ink); border: 0; background: var(--color-field-ink); font-weight: 500; cursor: pointer; transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out); }
 .stage-nav button:hover:not(:disabled) { color: var(--color-field-ink); background: var(--color-ink); }
 .stage-nav button:disabled { color: var(--color-field-ink); background: transparent; opacity: 0.45; cursor: default; }
-.stage-info h3 { max-width: 20ch; margin-top: var(--space-sm); font-size: clamp(1.75rem, 3vw, 2.75rem); line-height: 1; letter-spacing: -0.04em; }
+.stage-info h3 { max-width: 20ch; overflow-wrap: anywhere; margin-top: var(--space-sm); font-size: clamp(1.75rem, 3vw, 2.75rem); line-height: 1; letter-spacing: -0.04em; }
 .stage-info .content-type, .stage-info .creator { color: var(--color-field-ink); opacity: 0.8; }
 .stage-info .flag { margin: 0 0 var(--space-sm); }
 .stage-info .instagram-link { color: var(--color-field-ink); }
